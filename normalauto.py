@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import keras
 from keras.datasets import mnist
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D, Flatten, Reshape
-from keras import regularizers
+from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D, Flatten, Reshape,Dropout
+from keras import optimizers
 
 DATADIR='D:/polynomial/line/data'
 
@@ -17,24 +17,13 @@ CATEGORIES = ["train", "test"]
 category="train"
 
 
-path = os.path.join(DATADIR,category)  # create path to dogs and cats
-for img in os.listdir(path):  # iterate over each image per dogs and cats
-    img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
-    plt.imshow(img_array, cmap='gray')  # graph it
-    plt.show()  # display!
-
-    break  # we just want one for now so break
-
-#print(img_array)#showing pixels value
-#print(img_array.shape)
 
 
 
-IMG_SIZE = 500
 
-new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
-plt.imshow(new_array, cmap='gray')
-plt.show()
+IMG_SIZE = 170
+
+
 
 training_data = []
 
@@ -44,8 +33,11 @@ def create_training_data():
 
     for img in (os.listdir(path)):  # iterate over each image per dogs and cats
         try:
-            img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
-            new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))  # resize to normalize data size
+            img_array = cv2.imread(os.path.join(path, img))
+            b, g, r = cv2.split(img_array)
+            rgb_img = cv2.merge([r, g, b])
+
+            new_array = cv2.resize(rgb_img, (IMG_SIZE, IMG_SIZE))  # resize to normalize data size
             training_data.append(new_array)  # add this to our training_data
         except Exception as e:  # in the interest in keeping the output clean...
             pass
@@ -66,40 +58,20 @@ random.shuffle(training_data)
 '''for sample in training_data:
     print(sample)'''
 
-x_train= np.array(training_data).reshape(-1, IMG_SIZE, IMG_SIZE,1)
+
+x_train = np.array(training_data, dtype="float")
 
 max_value = float(x_train.max())
-x_train = x_train.astype('float32') / max_value
+x_train =x_train / max_value
 
-#print(x_train.shape)
 
-x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:3])))
 
-#print(x_train.shape)
 
 #test
 
 category="test"
 
 
-path = os.path.join(DATADIR,category)  # create path to dogs and cats
-for img in os.listdir(path):  # iterate over each image per dogs and cats
-    img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
-    plt.imshow(img_array, cmap='gray')  # graph it
-    plt.show()  # display!
-
-    break  # we just want one for now so break
-
-#print(img_array)#showing pixels value
-#print(img_array.shape)
-
-
-
-IMG_SIZE = 500
-
-new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
-plt.imshow(new_array, cmap='gray')
-plt.show()
 
 testing_data = []
 
@@ -109,8 +81,10 @@ def create_testing_data():
 
     for img in (os.listdir(path)):  # iterate over each image per dogs and cats
         try:
-            img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
-            new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))  # resize to normalize data size
+            img_array = cv2.imread(os.path.join(path, img))  # convert to array
+            b, g, r = cv2.split(img_array)
+            rgb_img = cv2.merge([r, g, b])
+            new_array = cv2.resize(rgb_img, (IMG_SIZE, IMG_SIZE))  # resize to normalize data size
             testing_data.append(new_array)  # add this to our training_data
         except Exception as e:  # in the interest in keeping the output clean...
             pass
@@ -128,23 +102,19 @@ create_testing_data()
 
 
 random.shuffle(testing_data)
-'''for sample in testing_data:
-    print(sample)'''
 
-x_test= np.array(testing_data).reshape(-1, IMG_SIZE, IMG_SIZE,1)
 
+
+x_test=np.array(testing_data, dtype="float")
 max_value = float(x_test.max())
-x_test =x_test.astype('float32') / max_value
-
-print(x_test.shape)
-
-x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:3])))
-
-print(x_test.shape)
-
+x_test =x_test/ max_value
 # input dimension = 784
+x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
 input_dim = x_train.shape[1]
-encoding_dim = 512
+print(input_dim)
+
+encoding_dim = 64
 
 compression_factor = float(input_dim) / encoding_dim
 print("Compression factor: %s" % compression_factor)
@@ -165,41 +135,48 @@ encoder = Model(input_img, encoder_layer(input_img))
 
 encoder.summary()
 
-autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+opt=keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+autoencoder.compile(optimizer=opt, loss='binary_crossentropy')
 autoencoder.fit(x_train, x_train,
-                epochs=50,
-                batch_size=64,
+                epochs=1,
+                batch_size=128,
                 shuffle=True,
                 validation_data=(x_test, x_test))
 
-num_images = 2
+num_images = 4
 np.random.seed(42)
 random_test_images = np.random.randint(x_test.shape[0], size=num_images)
 
 encoded_imgs = encoder.predict(x_test)
 decoded_imgs = autoencoder.predict(x_test)
 
-plt.figure(figsize=(50, 20))
+plt.figure(figsize=(256,140))
 
 for i, image_idx in enumerate(random_test_images):
+    print(image_idx)
     # plot original image
     ax = plt.subplot(3, num_images, i + 1)
-    plt.imshow(x_test[image_idx].reshape(500, 500))
-    plt.gray()
+
+    plt.imshow(x_test[image_idx].reshape(170, 170,-1))
+
+
+
+
+
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
     # plot encoded image
     ax = plt.subplot(3, num_images, num_images + i + 1)
-    plt.imshow(encoded_imgs[image_idx].reshape(64, 8))
-    plt.gray()
+    plt.imshow(encoded_imgs[image_idx].reshape(8,8))
+
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
     # plot reconstructed image
     ax = plt.subplot(3, num_images, 2 * num_images + i + 1)
-    plt.imshow(decoded_imgs[image_idx].reshape(500, 500))
-    plt.gray()
+    plt.imshow(decoded_imgs[image_idx].reshape(170, 170,-1))
+
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 plt.show()

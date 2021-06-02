@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import keras
 from keras.datasets import mnist
 from keras.models import Model, Sequential
-from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D, Flatten, Reshape
+from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D, Flatten, Reshape,Dropout
 from keras import regularizers
 
 DATADIR='D:/polynomial/line/data'
@@ -17,11 +17,12 @@ CATEGORIES = ["train", "test"]
 category="train"
 
 
+
 path = os.path.join(DATADIR,category)  # create path to dogs and cats
 for img in os.listdir(path):  # iterate over each image per dogs and cats
     img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
     plt.imshow(img_array, cmap='gray')  # graph it
-    plt.show()  # display!
+    #plt.show()  # display!
 
     break  # we just want one for now so break
 
@@ -30,11 +31,11 @@ for img in os.listdir(path):  # iterate over each image per dogs and cats
 
 
 
-IMG_SIZE = 500
+IMG_SIZE = 252
 
 new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
 plt.imshow(new_array, cmap='gray')
-plt.show()
+#plt.show()
 
 training_data = []
 
@@ -71,9 +72,8 @@ x_train= np.array(training_data).reshape(-1, IMG_SIZE, IMG_SIZE,1)
 max_value = float(x_train.max())
 x_train = x_train.astype('float32') / max_value
 
-#print(x_train.shape)
+print('1',x_train.shape)
 
-x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:3])))
 
 #print(x_train.shape)
 
@@ -86,7 +86,7 @@ path = os.path.join(DATADIR,category)  # create path to dogs and cats
 for img in os.listdir(path):  # iterate over each image per dogs and cats
     img_array = cv2.imread(os.path.join(path, img), cv2.IMREAD_GRAYSCALE)  # convert to array
     plt.imshow(img_array, cmap='gray')  # graph it
-    plt.show()  # display!
+    #plt.show()  # display!
 
     break  # we just want one for now so break
 
@@ -95,11 +95,11 @@ for img in os.listdir(path):  # iterate over each image per dogs and cats
 
 
 
-IMG_SIZE = 500
+IMG_SIZE = 252
 
 new_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
 plt.imshow(new_array, cmap='gray')
-plt.show()
+#plt.show()
 
 testing_data = []
 
@@ -135,41 +135,44 @@ x_test= np.array(testing_data).reshape(-1, IMG_SIZE, IMG_SIZE,1)
 
 max_value = float(x_test.max())
 x_test =x_test.astype('float32') / max_value
+print('2',x_test.shape)
 
-print(x_test.shape)
+x_train = x_train.reshape((len(x_train), 252, 252, 1))
+x_test = x_test.reshape((len(x_test), 252, 252, 1))
 
-x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:3])))
 
-print(x_test.shape)
-
-# input dimension = 784
-input_dim = x_train.shape[1]
-encoding_dim = 512
-
-compression_factor = float(input_dim) / encoding_dim
-print("Compression factor: %s" % compression_factor)
 
 autoencoder = Sequential()
-autoencoder.add(
-    Dense(encoding_dim, input_shape=(input_dim,), activation='relu')
-)
-autoencoder.add(
-    Dense(input_dim, activation='sigmoid')
-)
+
+# Encoder Layers
+autoencoder.add(Conv2D(16, (3, 3), activation='relu', padding='same', input_shape=x_train.shape[1:]))
+autoencoder.add(MaxPooling2D((2, 2), padding='same'))
+autoencoder.add(Conv2D(8, (3, 3), activation='relu', padding='same'))
+autoencoder.add(MaxPooling2D((2, 2), padding='same'))
+autoencoder.add(Conv2D(8, (3, 3), strides=(2,2), activation='relu', padding='same'))
+#autoencoder.summary()
+# Flatten encoding for visualization
+autoencoder.add(Flatten())
+autoencoder.add(Reshape((32, 32, 8)))
+
+# Decoder Layers
+autoencoder.add(Conv2D(8, (3, 3), activation='relu', padding='same'))
+autoencoder.add(UpSampling2D((2, 2)))
+autoencoder.add(Conv2D(8, (3, 3), activation='relu', padding='same'))
+autoencoder.add(UpSampling2D((2, 2)))
+autoencoder.add(Conv2D(16, (3, 3), activation='relu'))
+autoencoder.add(UpSampling2D((2, 2)))
+autoencoder.add(Conv2D(1, (3, 3), activation='sigmoid', padding='same'))
 
 autoencoder.summary()
 
-input_img = Input(shape=(input_dim,))
-encoder_layer = autoencoder.layers[0]
-encoder = Model(input_img, encoder_layer(input_img))
-
+encoder = Model(inputs=autoencoder.input, outputs=autoencoder.get_layer('flatten_1').output)
 encoder.summary()
 
-autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+autoencoder.compile(optimizer='adam', loss='mse')
 autoencoder.fit(x_train, x_train,
-                epochs=50,
+                epochs=10,
                 batch_size=64,
-                shuffle=True,
                 validation_data=(x_test, x_test))
 
 num_images = 2
@@ -179,26 +182,26 @@ random_test_images = np.random.randint(x_test.shape[0], size=num_images)
 encoded_imgs = encoder.predict(x_test)
 decoded_imgs = autoencoder.predict(x_test)
 
-plt.figure(figsize=(50, 20))
+plt.figure(figsize=(256, 80))
 
 for i, image_idx in enumerate(random_test_images):
     # plot original image
     ax = plt.subplot(3, num_images, i + 1)
-    plt.imshow(x_test[image_idx].reshape(500, 500))
+    plt.imshow(x_test[image_idx].reshape(252, 252))
     plt.gray()
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
     # plot encoded image
     ax = plt.subplot(3, num_images, num_images + i + 1)
-    plt.imshow(encoded_imgs[image_idx].reshape(64, 8))
+    plt.imshow(encoded_imgs[image_idx].reshape(256, 32))
     plt.gray()
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 
     # plot reconstructed image
     ax = plt.subplot(3, num_images, 2 * num_images + i + 1)
-    plt.imshow(decoded_imgs[image_idx].reshape(500, 500))
+    plt.imshow(decoded_imgs[image_idx].reshape(252, 252))
     plt.gray()
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
